@@ -539,7 +539,8 @@ class EvalResults:
                     if evaluator is not None and score.name != evaluator:
                         continue
                     matching_scores_count += 1
-                    if score.score < min_score:
+                    # ``not >=`` (rather than ``<``) so that NaN scores count as offenders.
+                    if not score.score >= min_score:
                         offenders.append(f"{item.item_id}/{score.name}={score.score:.3f}")
             for sub in results.sub_results.values():
                 _check(sub)
@@ -1056,11 +1057,16 @@ class CheckResult:
         passed: Whether the check passed.
         reason: Human-readable explanation.
         check_name: Name of the check that produced this result.
+        score: Optional numeric score produced by the check (for example,
+            from a function evaluator that returns a number).  When ``None``,
+            ``LocalEvaluator`` records ``1.0`` for a pass and ``0.0`` for a
+            failure.
     """
 
     passed: bool
     reason: str
     check_name: str
+    score: float | None = None
 
 
 EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]]
@@ -1388,8 +1394,9 @@ def _coerce_result(value: Any, check_name: str) -> CheckResult:
         return CheckResult(passed=value, reason="passed" if value else "failed", check_name=check_name)
 
     if isinstance(value, (int, float)):
-        passed = value >= 0.5
-        return CheckResult(passed=passed, reason=f"score={value:.3f}", check_name=check_name)
+        score = float(value)
+        passed = score >= 0.5
+        return CheckResult(passed=passed, reason=f"score={score:.3f}", check_name=check_name, score=score)
 
     if isinstance(value, dict):
         d = cast(dict[str, Any], value)
@@ -1409,7 +1416,7 @@ def _coerce_result(value: Any, check_name: str) -> CheckResult:
             # Honour an explicit 'passed' override; otherwise threshold-based.
             passed = bool(d["passed"]) if "passed" in d else score >= float(d.get("threshold", 0.5))
             reason = str(d.get("reason", f"score={score:.3f}"))
-            return CheckResult(passed=passed, reason=reason, check_name=check_name)
+            return CheckResult(passed=passed, reason=reason, check_name=check_name, score=score)
         if "passed" in d:
             passed_val = d["passed"]
             return CheckResult(
@@ -1611,7 +1618,7 @@ class LocalEvaluator:
                 item_scores.append(
                     EvalScoreResult(
                         name=result.check_name,
-                        score=1.0 if result.passed else 0.0,
+                        score=result.score if result.score is not None else (1.0 if result.passed else 0.0),
                         passed=result.passed,
                         sample={"reason": result.reason} if result.reason else None,
                     )
