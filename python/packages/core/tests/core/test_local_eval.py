@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import math
 from typing import Any
 
 import pytest
@@ -819,6 +820,42 @@ class TestPerItemResults:
         assert results.items[1].input_text == "Q2"
         assert results.items[1].output_text == "R2"
 
+    @pytest.mark.asyncio
+    async def test_numeric_evaluator_scores_are_preserved(self):
+        @evaluator
+        def float_judge(response: str) -> float:
+            return 0.6
+
+        @evaluator
+        def dict_judge(response: str) -> dict:
+            return {"score": 0.3, "threshold": 0.2}
+
+        @evaluator
+        def bool_check(response: str) -> bool:
+            return True
+
+        results = await LocalEvaluator(float_judge, dict_judge, bool_check).evaluate([_make_item()])
+
+        scores = {s.name: s for s in results.items[0].scores}
+        assert scores["float_judge"].score == pytest.approx(0.6)
+        assert scores["float_judge"].passed is True
+        assert scores["dict_judge"].score == pytest.approx(0.3)
+        assert scores["dict_judge"].passed is True
+        # Boolean checks keep mapping to 1.0 / 0.0.
+        assert scores["bool_check"].score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_numeric_evaluator_score_below_gate_raises(self):
+        @evaluator
+        def judge(response: str) -> float:
+            return 0.6
+
+        results = await LocalEvaluator(judge).evaluate([_make_item()])
+
+        results.assert_score_at_least(0.5)
+        with pytest.raises(EvalNotPassedError, match="judge=0.600"):
+            results.assert_score_at_least(0.8)
+
 
 # ---------------------------------------------------------------------------
 # num_repetitions validation
@@ -1272,6 +1309,12 @@ class TestAssertScoreAtLeast:
             parent.assert_score_at_least(0.5)
         # Offender from sub-result is surfaced.
         assert "0.200" in str(exc.value)
+
+    def test_nan_score_raises(self) -> None:
+        results = _score_results([EvalScoreResult(name="relevance", score=math.nan)])
+        with pytest.raises(EvalNotPassedError) as exc:
+            results.assert_score_at_least(0.5)
+        assert "relevance=nan" in str(exc.value)
 
 
 class TestAssertNoFailedItems:
