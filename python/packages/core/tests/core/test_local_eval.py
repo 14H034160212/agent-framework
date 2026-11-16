@@ -7,6 +7,7 @@ from __future__ import annotations
 import inspect
 import json
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -1370,6 +1371,15 @@ class TestAssertScoreAtLeast:
         )
         # Should match "sub_eval" in sub-results and pass without error
         parent.assert_score_at_least(0.8, evaluator="sub_eval")
+
+    def test_check_result_subclass_can_add_required_fields(self) -> None:
+        @dataclass
+        class LabelledCheckResult(CheckResult):
+            label: str
+
+        result = LabelledCheckResult(True, "ok", "check", "positive", score=0.7)
+        assert result.label == "positive"
+        assert result.score == 0.7
 
     def test_nan_score_raises(self) -> None:
         results = _score_results([EvalScoreResult(name="relevance", score=math.nan)])

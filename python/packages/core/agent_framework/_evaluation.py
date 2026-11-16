@@ -1060,13 +1060,14 @@ class CheckResult:
         score: Optional numeric score produced by the check (for example,
             from a function evaluator that returns a number).  When ``None``,
             ``LocalEvaluator`` records ``1.0`` for a pass and ``0.0`` for a
-            failure.
+            failure.  Keyword-only, so subclasses can still add required
+            fields.
     """
 
     passed: bool
     reason: str
     check_name: str
-    score: float | None = None
+    score: float | None = field(default=None, kw_only=True)
 
 
 EvalCheck = Callable[[EvalItem], CheckResult | Awaitable[CheckResult]]
