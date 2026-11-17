@@ -270,6 +270,16 @@ class TestReturnTypeCoercion:
         assert result.reason == "all good"
 
     @pytest.mark.asyncio
+    async def test_dict_with_passed_and_score_keeps_score(self):
+        @evaluator
+        def passed_with_score(response: str) -> dict:
+            return {"passed": True, "score": 0.3}
+
+        result = await passed_with_score(_make_item())  # type: ignore[misc]  # pyrefly: ignore[not-async]  # ty: ignore[invalid-await]
+        assert result.passed is True
+        assert result.score == 0.3
+
+    @pytest.mark.asyncio
     async def test_dict_with_score_and_string_passed_raises(self):
         @evaluator
         def bad_passed_with_score(response: str) -> dict:
